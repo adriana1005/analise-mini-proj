@@ -1,0 +1,12 @@
+ts,evento,id,regra,nivel,msg
+2026-11-05T14:12:00.000+00:00,abre,1,R4-info,INFO,Porta aberta
+2026-11-05T14:13:20.000+00:00,fecha,1,R4-info,INFO,Porta aberta
+2026-11-05T14:27:20.000+00:00,abre,2,R3,AVISO,Subida anormal: +0.45 °C/h
+2026-11-05T14:30:20.000+00:00,abre,3,R4-info,INFO,Porta aberta
+2026-11-05T14:32:20.000+00:00,fecha,3,R4-info,INFO,Porta aberta
+2026-11-05T14:34:20.000+00:00,fecha,2,R3,AVISO,Subida anormal: +0.45 °C/h
+2026-11-05T14:44:20.000+00:00,abre,4,R4-info,INFO,Porta aberta
+2026-11-05T14:46:00.000+00:00,fecha,4,R4-info,INFO,Porta aberta
+2026-11-05T15:01:00.000+00:00,abre,5,R4-info,INFO,Porta aberta
+2026-11-05T15:03:20.000+00:00,fecha,5,R4-info,INFO,Porta aberta
+2026-11-05T15:10:20.000+00:00,abre,6,R5-silencio,CRÍTICO,Sensor sem comunicação há mais de 10 s
