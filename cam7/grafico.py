@@ -19,7 +19,7 @@ def t(s):
 
 
 ts, temp, ewma, porta = [], [], [], []
-with open("registo.csv", encoding="utf-8") as fh:
+with open("demo/registo.csv", encoding="utf-8") as fh:
     for r in csv.DictReader(fh):
         ts.append(t(r["ts"])); temp.append(float(r["temp"]))
         ewma.append(float(r["ewma"]) if r["ewma"] else None); porta.append(r["porta"] == "1")
@@ -38,7 +38,7 @@ for i, p in enumerate(porta):
         ax.axvspan(ini, ts[i], color="grey", alpha=.25); ini = None
 
 cores = {"AVISO": "#f9a825", "CRÍTICO": "#c62828"}
-with open("alertas_log.csv", encoding="utf-8") as fh:
+with open("demo/alertas_log.csv", encoding="utf-8") as fh:
     for r in csv.DictReader(fh):
         if r["evento"] == "abre" and r["nivel"] in cores:
             x = t(r["ts"])

@@ -33,10 +33,10 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 LOCK = threading.RLock()
 CLIENTES = set()
 
-f_reg = open("registo.csv", "w", newline="", encoding="utf-8")
+f_reg = open("demo/registo.csv", "w", newline="", encoding="utf-8")
 w_reg = csv.writer(f_reg)
 w_reg.writerow(["ts", "temp", "ewma", "tendencia", "porta", "seq"])
-f_al = open("alertas_log.csv", "w", newline="", encoding="utf-8")
+f_al = open("demo/alertas_log.csv", "w", newline="", encoding="utf-8")
 w_al = csv.writer(f_al)
 w_al.writerow(["ts", "evento", "id", "regra", "nivel", "msg"])
 

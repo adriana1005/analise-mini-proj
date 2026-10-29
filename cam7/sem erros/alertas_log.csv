@@ -1,0 +1,7 @@
+ts,evento,id,regra,nivel,msg
+2026-11-05T14:12:00.000+00:00,abre,1,R4-info,INFO,Porta aberta
+2026-11-05T14:13:20.000+00:00,fecha,1,R4-info,INFO,Porta aberta
+2026-11-05T14:33:20.000+00:00,abre,2,R4-info,INFO,Porta aberta
+2026-11-05T14:35:20.000+00:00,fecha,2,R4-info,INFO,Porta aberta
+2026-11-05T14:55:40.000+00:00,abre,3,R4-info,INFO,Porta aberta
+2026-11-05T14:58:00.000+00:00,fecha,3,R4-info,INFO,Porta aberta
