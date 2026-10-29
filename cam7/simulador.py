@@ -43,7 +43,7 @@ def main():
     P = parametros(a.semente)
     rng = random.Random(a.semente)
     falha = P["falha_demo"] if a.falha == "auto" else a.falha
-    duracao = 90 * 60 if a.cenario == "demo" else None
+    duracao = 120 * 60 if a.cenario == "demo" else None
     dt = a.velocidade
     sess = requests.Session()
 

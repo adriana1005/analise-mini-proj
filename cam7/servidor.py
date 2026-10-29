@@ -19,9 +19,9 @@ CFG = {"lim_sup": SETPOINT + 2.0, "lim_inf": SETPOINT - 2.0, "persistencia_min":
 # ---------------- constantes de afinação (tempo SIMULADO, em segundos) ----------------
 ALFA = 0.1               # EWMA
 JAN_STATS_S = 300        # janela de 5 min
-JAN_TEND_S = 1800        # janela da regressão (30 min)
+JAN_TEND_S = 3600        # janela da regressão (30 min)
 TAU_TEND_S = 600         # suavização da tendência (10 min)
-LIM_TEND = 0.25          # °C/h
+LIM_TEND = 0.35          # °C/h
 HIST_TEND = 0.10         # histerese da tendência
 PERS_TEND_S = 300        # persistência da R3
 GRACA_PORTA_S = 480      # tolerância depois de a porta fechar
@@ -206,12 +206,13 @@ class Camara:
             self.jt.append((ts, x))
         while self.jt and ts - self.jt[0][0] > JAN_TEND_S:
             self.jt.popleft()
-        self._tendencia(ts)
+        if not tol:
+            self._tendencia(ts)
         self._regras(ts, tol)
 
     def _tendencia(self, ts):
         jt = self.jt
-        if len(jt) >= 15 and jt[-1][0] - jt[0][0] >= 1200:
+        if len(jt) >= 30 and jt[-1][0] - jt[0][0] >= 3000:
             n = len(jt)
             tm = sum(t for t, _ in jt) / n
             xm = sum(v for _, v in jt) / n
