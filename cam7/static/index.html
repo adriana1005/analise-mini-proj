@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vigia da Câmara 7</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --ok:#2e7d32; --av:#f9a825; --cr:#c62828; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:#101820; color:#eef; }
+  header { display:flex; justify-content:space-between; align-items:center; padding:10px 20px; background:#1b2733; }
+  h1 { margin:0; font-size:1.4rem; }
+  #estado { font-size:2.2rem; font-weight:800; padding:6px 24px; border-radius:10px; }
+  #estado.ok { background:var(--ok); } #estado.av { background:var(--av); color:#000; } #estado.cr { background:var(--cr); }
+  #liga { padding:8px 20px; font-weight:700; }
+  #liga.bom { background:#1b3a24; } #liga.mau { background:var(--cr); font-size:1.5rem; text-align:center; }
+  .kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; padding:10px 20px; }
+  .kpi { background:#1b2733; border-radius:8px; padding:8px 12px; }
+  .kpi small { opacity:.7; } .kpi b { display:block; font-size:2rem; }
+  #grafico { height:330px; margin:0 20px; background:#fff; border-radius:8px; padding:6px; }
+  #grafico.parado canvas { opacity:.2; }
+  main { display:grid; grid-template-columns:2fr 1fr; gap:12px; padding:12px 20px; }
+  section { background:#1b2733; border-radius:8px; padding:10px 14px; }
+  h2 { margin:0 0 8px; font-size:1.1rem; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  td, th { padding:4px 6px; border-bottom:1px solid #345; text-align:left; }
+  .n-CRÍTICO { color:#ff8a80; font-weight:800; } .n-AVISO { color:#ffd54f; font-weight:700; } .n-INFO { color:#90caf9; }
+  label { display:block; margin:6px 0; } input { width:90px; margin-left:8px; }
+  button { cursor:pointer; padding:3px 10px; }
+  dl { display:grid; grid-template-columns:1fr auto; gap:2px 10px; margin:0; } dd { margin:0; font-weight:700; text-align:right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vigia da Câmara 7</h1>
+  <div id="estado" class="ok">…</div>
+</header>
+<div id="liga" class="mau">A LIGAR AO SERVIDOR…</div>
+
+<div class="kpis">
+  <div class="kpi"><small>Temperatura</small><b id="k-temp">—</b></div>
+  <div class="kpi"><small>EWMA</small><b id="k-ewma">—</b></div>
+  <div class="kpi"><small>Tendência</small><b id="k-tend">—</b></div>
+  <div class="kpi"><small>Humidade</small><b id="k-hum">—</b></div>
+  <div class="kpi"><small>Porta</small><b id="k-porta">—</b></div>
+  <div class="kpi"><small>Alertas ativos</small><b id="k-alertas">—</b></div>
+</div>
+
+<div id="grafico"><canvas id="cv"></canvas></div>
+
+<main>
+  <section>
+    <h2>Registo de alertas (hora simulada)</h2>
+    <table>
+      <thead><tr><th>Hora</th><th>Nível</th><th>Regra</th><th>Mensagem</th><th>Estado</th><th></th></tr></thead>
+      <tbody id="alertas"></tbody>
+    </table>
+  </section>
+  <div>
+    <section>
+      <h2>Limites configuráveis</h2>
+      <form id="cfg" onsubmit="guardar(event)">
+        <label>Limite superior (°C) <input id="c-sup" type="number" step="0.1"></label>
+        <label>Limite inferior (°C) <input id="c-inf" type="number" step="0.1"></label>
+        <label>Persistência (min) <input id="c-per" type="number" step="0.5" min="0.5"></label>
+        <button>Aplicar</button> <span id="c-msg"></span>
+      </form>
+    </section>
+    <section style="margin-top:12px">
+      <h2>Sessão</h2>
+      <dl id="sessao"></dl>
+    </section>
+  </div>
+</main>
+
+<script>
+const JANELA = 900, MAXPTS = 2500;           // 15 min e limite duro de pontos no browser
+let pts = [], bandas = [], aberta = false, lastT = 0, lastData = 0, srvOk = false;
+let cfg = {lim_sup: 3, lim_inf: -1, persistencia_min: 2}, hashAl = '', latN = 0, latSoma = 0;
+const $ = id => document.getElementById(id);
+const hora = t => new Date(t * 1000).toISOString().substr(11, 8);
+
+const bandasPlugin = {
+  id: 'bandas',
+  beforeDatasetsDraw(c) {
+    const {ctx, chartArea: a, scales: {x}} = c;
+    ctx.save();
+    for (const [i, f] of bandas) {
+      const x0 = Math.max(x.getPixelForValue(i), a.left);
+      const x1 = Math.min(x.getPixelForValue(f ?? lastT), a.right);
+      if (x1 > x0) {
+        ctx.fillStyle = 'rgba(90,90,90,.25)'; ctx.fillRect(x0, a.top, x1 - x0, a.bottom - a.top);
+        ctx.fillStyle = '#333'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('PORTA', x0 + 3, a.top + 14);
+      }
+    }
+    ctx.restore();
+  }
+};
+const mk = (label, cor, w, dash) => ({label, data: [], parsing: false, borderColor: cor,
+                                       borderWidth: w, borderDash: dash || [], pointRadius: 0});
+const chart = new Chart($('cv'), {
+  type: 'line',
+  data: {datasets: [mk('Temperatura', '#1565c0', 1.5), mk('EWMA', '#ef6c00', 3),
+                    mk('Limite superior', '#c62828', 2, [8, 4]), mk('Limite inferior', '#6a1b9a', 2, [8, 4])]},
+  options: {animation: false, maintainAspectRatio: false,
+            scales: {x: {type: 'linear', ticks: {maxTicksLimit: 8, callback: v => hora(v).slice(0, 5)}},
+                     y: {title: {display: true, text: '°C'}}},
+            plugins: {legend: {position: 'bottom'}}},
+  plugins: [bandasPlugin]
+});
+
+function addPonto(p) {
+  pts.push(p);
+  if (p.porta && !aberta) { bandas.push([p.t, null]); aberta = true; }
+  if (!p.porta && aberta) { bandas[bandas.length - 1][1] = p.t; aberta = false; }
+  lastT = p.t;
+  while (pts.length && (pts[0].t < p.t - JANELA || pts.length > MAXPTS)) pts.shift();
+  while (bandas.length && bandas[0][1] !== null && bandas[0][1] < p.t - JANELA) bandas.shift();
+}
+
+function redraw() {
+  const d = chart.data.datasets, x0 = lastT - JANELA;
+  d[0].data = pts.map(p => ({x: p.t, y: p.temp}));
+  d[1].data = pts.map(p => ({x: p.t, y: p.ewma}));
+  d[2].data = [{x: x0, y: cfg.lim_sup}, {x: lastT, y: cfg.lim_sup}];
+  d[3].data = [{x: x0, y: cfg.lim_inf}, {x: lastT, y: cfg.lim_inf}];
+  chart.options.scales.x.min = x0; chart.options.scales.x.max = lastT;
+  chart.options.scales.y.suggestedMin = cfg.lim_inf - 0.5;
+  chart.options.scales.y.suggestedMax = cfg.lim_sup + 0.5;
+  chart.update('none');
+}
+
+const f = (v, d = 2) => v == null ? '—' : v.toFixed(d);
+const SIMB = {'CRÍTICO': '✖', 'AVISO': '▲', 'INFO': 'ℹ'};
+
+function render(s) {
+  const k = s.kpi;
+  $('k-temp').textContent = f(k.temp) + ' °C';
+  $('k-ewma').textContent = f(k.ewma) + ' °C';
+  $('k-tend').textContent = k.tend == null ? '—' : (k.tend >= 0 ? '+' : '') + k.tend.toFixed(2) + ' °C/h';
+  $('k-hum').textContent = f(k.hum, 1) + ' %';
+  $('k-porta').textContent = k.porta ? 'ABERTA' : 'fechada';
+  $('k-alertas').textContent = k.ativos;
+
+  const m = {'OK': ['ok', '✔ NORMAL'], 'AVISO': ['av', '▲ ATENÇÃO'], 'CRÍTICO': ['cr', '✖ CRÍTICO']}[s.estado];
+  $('estado').className = m[0]; $('estado').textContent = m[1];
+
+  const h = JSON.stringify(s.alertas);
+  if (h !== hashAl) {                               // só reconstrói a tabela se mudou
+    hashAl = h;
+    $('alertas').innerHTML = s.alertas.map(a => `<tr>
+      <td>${hora(a.inicio)}</td><td class="n-${a.nivel}">${SIMB[a.nivel]} ${a.nivel}</td>
+      <td>${a.regra}</td><td>${a.msg}</td><td>${a.estado}</td>
+      <td>${a.estado === 'ativo' ? `<button onclick="ack(${a.id})">Reconhecer</button>` : ''}</td></tr>`).join('');
+  }
+
+  if (!$('cfg').contains(document.activeElement)) {
+    $('c-sup').value = s.cfg.lim_sup; $('c-inf').value = s.cfg.lim_inf; $('c-per').value = s.cfg.persistencia_min;
+  }
+  const x = s.sessao;
+  $('sessao').innerHTML = [['Recebidas', x.recebidas], ['Válidas', x.validas], ['Rejeitadas', x.rejeitadas],
+    ['Malformadas', x.malformadas], ['Duplicadas', x.duplicadas], ['Desordenadas', x.desordenadas],
+    ['Perdidas', x.perdidas], ['Latência média', latN ? (latSoma / latN).toFixed(0) + ' ms' : '—'],
+    ['Memória servidor', x.rss_mb == null ? '—' : x.rss_mb + ' MB']]
+    .map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+}
+
+const ack = id => fetch('/ack/' + id, {method: 'POST'});
+async function guardar(e) {
+  e.preventDefault();
+  try {
+    const r = await fetch('/config', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lim_sup: +$('c-sup').value, lim_inf: +$('c-inf').value, persistencia_min: +$('c-per').value})});
+    $('c-msg').textContent = r.ok ? 'guardado ✔' : 'valores inválidos ✖';
+  } catch { $('c-msg').textContent = 'sem ligação ✖'; }
+}
+
+const es = new EventSource('/stream');
+es.onerror = () => { srvOk = false; };
+es.onmessage = ev => {
+  srvOk = true;
+  const s = JSON.parse(ev.data);
+  if (s.ha_s != null) lastData = Date.now() - s.ha_s * 1000;
+  if (s.tipo === 'init') { pts = []; bandas = []; aberta = false; s.hist.forEach(addPonto); }
+  else if (s.ponto) {
+    addPonto(s.ponto);
+    if (s.ponto.env) { const l = Date.now() - s.ponto.env; if (l >= 0 && l < 60000) { latSoma += l; latN++; } }
+  }
+  cfg = s.cfg; render(s); redraw();
+};
+
+// estado da ligação: servidor em baixo OU dados parados (sensor mudo)
+setInterval(() => {
+  const ha = (Date.now() - lastData) / 1000;
+  let txt = '● LIGADO · dados a chegar', cls = 'bom';
+  if (!srvOk) { txt = '✖ SEM LIGAÇÃO AO SERVIDOR'; cls = 'mau'; }
+  else if (lastData === 0 || ha > 3) { txt = `⚠ SENSOR SEM DADOS HÁ ${lastData ? Math.floor(ha) + ' s' : '…'}`; cls = 'mau'; }
+  $('liga').textContent = txt; $('liga').className = cls;
+  $('grafico').classList.toggle('parado', cls === 'mau');
+}, 500);
+</script>
+</body>
+</html>
